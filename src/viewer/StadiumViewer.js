@@ -13,7 +13,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { gsap } from 'gsap';
-import { buildStadium, disposeStadium } from './stadium.js';
+import { buildStadium, disposeStadium, fillCrowd } from './stadium.js'; // fillCrowd via refreshCrowd()
 import { screenTexture } from './textures.js';
 import { seatPrice } from '../../shared/layout.js';
 
@@ -160,6 +160,7 @@ export class StadiumViewer {
         fx.forEach((o, i) => { o.visible = was[i]; });
       };
       this.composer.addPass(this.ao);
+      this.aoAllowed = true;
     }
     this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.35, 0.6, 0.86);
     this.composer.addPass(this.bloom);
@@ -196,6 +197,7 @@ export class StadiumViewer {
     this.applyPrices();
     for (const s of this.stadium.seats) s.taken = false;
     for (const st of this.stadium.stands.values()) this.updateStandStats(st);
+    this.refreshCrowd(); // empty until availability arrives
     const p = this.overviewPose();
     if (rebuild) {
       this.camera.position.set(p.pos.x + p.pos.z * 0.6, p.pos.y * 1.3, -p.pos.z * 0.8);
@@ -251,6 +253,7 @@ export class StadiumViewer {
     });
     for (const st of this.stadium.stands.values()) this.updateStandStats(st);
     this.paintAll();
+    this.refreshCrowd(); // a spectator on every sold or held seat
     this.onChange();
   }
 
@@ -258,7 +261,14 @@ export class StadiumViewer {
     seat.taken = true;
     this.updateStandStats(seat.stand);
     this.paint([seat]);
+    this.refreshCrowd();
     this.onChange();
+  }
+
+  // In the view from a seat, the seats right beside the viewer stay empty
+  refreshCrowd() {
+    const { mode, selected } = this.state;
+    fillCrowd(this.stadium, mode === 'seat' && selected ? selected.pos : null);
   }
 
   updateStandStats(st) {
@@ -351,8 +361,10 @@ export class StadiumViewer {
 
   // ---- Navigation --------------------------------------------------------------------
   resetFocus(mode, focus = null) {
+    const wasSeat = this.state.mode === 'seat';
     Object.assign(this.state, { mode, focus, selected: null, hoverSeat: null, hoverStand: null });
     this.paintAll();
+    if (wasSeat) this.refreshCrowd(); // put the neighbours back
     this.onHover(null);
     this.onChange();
   }
@@ -376,6 +388,7 @@ export class StadiumViewer {
     const { state, look } = this;
     Object.assign(state, { mode: 'seat', focus: seat.stand.id, selected: seat, hoverSeat: null, hoverStand: null });
     this.paintAll();
+    this.refreshCrowd();
     this.onHover(null);
     this.onChange();
     this.setControls('seat');
@@ -533,13 +546,23 @@ export class StadiumViewer {
   updateDetail() {
     const { stadium, camera } = this;
     const { near, far } = stadium.chairs;
+    const { people } = stadium;
     for (const m of stadium.meshes) {
       const s = m.boundingSphere;
-      const dist = camera.position.distanceTo(s.center) - s.radius;
-      const geo = dist < 25 ? near : far;
+      const close = camera.position.distanceTo(s.center) - s.radius < 25;
+      const geo = close ? near : far;
       if (m.geometry !== geo) m.geometry = geo;
+      // The stand's crowd uses the same near/far switch
+      const crowd = m.userData.stand.crowd;
+      if (crowd && people) {
+        const set = close ? people.near : people.far;
+        if (crowd.body.geometry !== set.body) {
+          crowd.body.geometry = set.body;
+          crowd.head.geometry = set.head;
+        }
+      }
     }
-    if (this.ao) this.ao.enabled = this.state.mode !== 'overview' || camera.position.y < stadium.extent * 0.5;
+    if (this.ao) this.ao.enabled = this.aoAllowed && (this.state.mode !== 'overview' || camera.position.y < stadium.extent * 0.5);
     const showBeams = camera.position.y > stadium.extent * 0.7;
     for (const b of stadium.beams || []) b.visible = showBeams;
   }
@@ -548,8 +571,25 @@ export class StadiumViewer {
     if (!this.alive) return;
     this.raf = requestAnimationFrame(this.tick);
     if (!this.stadium) return;
+    this.watchFrameRate();
     this.update();
     this.composer.render();
+  }
+
+  // Adaptive quality: if real frames stay slower than ~45 fps while ambient occlusion
+  // is on, switch it off for this visit (the biggest single cost, ~8 ms).
+  watchFrameRate() {
+    const now = performance.now();
+    const dt = this.lastFrame ? now - this.lastFrame : 0;
+    this.lastFrame = now;
+    if (!this.ao?.enabled || document.hidden || dt <= 0 || dt > 250) return;
+    this.frameAvg = this.frameAvg ? this.frameAvg * 0.95 + dt * 0.05 : dt;
+    this.aoFrames = (this.aoFrames || 0) + 1;
+    if (this.aoFrames > 90 && this.frameAvg > 22) {
+      this.aoAllowed = false;
+      this.ao.enabled = false;
+      console.info(`Stadium view: ambient occlusion turned off to keep it smooth (${this.frameAvg.toFixed(1)} ms/frame)`);
+    }
   }
 
   /** Finish any camera flight and return the current frame (used by tests). */

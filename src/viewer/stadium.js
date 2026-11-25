@@ -96,6 +96,85 @@ function tint(geo, value) {
   return geo;
 }
 
+// Per-vertex shade from a height test, e.g. dark hair on the top of a head.
+function tintBy(geo, fn) {
+  const p = geo.attributes.position;
+  const c = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) c.fill(fn(p.getX(i), p.getY(i), p.getZ(i)), i * 3, i * 3 + 3);
+  geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return geo;
+}
+const merge = (parts) => mergeGeometries(parts.map((g) => {
+  const n = g.index ? g.toNonIndexed() : g;
+  n.clearGroups();
+  return n;
+}));
+
+// Seated spectator, same local frame as the chair (origin on the floor, facing +z).
+// Body and head are separate meshes so the shirt colour and the skin tone can differ.
+// Vertex colours: 1 = shirt/skin colour, lower = darker (trousers, hair).
+function personGeometry(detail = 'near') {
+  if (detail === 'far') {
+    return {
+      body: merge([tint(new THREE.BoxGeometry(0.38, 0.62, 0.3).translate(0, 0.78, -0.04), 1)]),
+      head: merge([tintBy(new THREE.BoxGeometry(0.19, 0.22, 0.2).translate(0, 1.26, -0.05), (x, y) => (y > 1.33 ? 0.25 : 1))]),
+    };
+  }
+  const torso = new THREE.CylinderGeometry(0.165, 0.19, 0.52, 6, 1, true).scale(1, 1, 0.62).translate(0, 0.86, -0.07);
+  const body = merge([
+    tint(torso, 1),
+    tint(new THREE.BoxGeometry(0.34, 0.13, 0.4).translate(0, 0.535, 0.08), 0.3), // thighs (trousers)
+    tint(new THREE.BoxGeometry(0.28, 0.44, 0.12).translate(0, 0.26, 0.26), 0.28), // lower legs
+    tint(new THREE.BoxGeometry(0.085, 0.36, 0.1).translate(-0.225, 0.84, -0.04), 1), // upper arms
+    tint(new THREE.BoxGeometry(0.085, 0.36, 0.1).translate(0.225, 0.84, -0.04), 1),
+    tint(new THREE.BoxGeometry(0.08, 0.08, 0.27).translate(-0.17, 0.64, 0.08), 0.95), // forearms on the lap
+    tint(new THREE.BoxGeometry(0.08, 0.08, 0.27).translate(0.17, 0.64, 0.08), 0.95),
+  ]);
+  const head = merge([
+    tintBy(new THREE.SphereGeometry(0.105, 7, 5).scale(0.92, 1.08, 1).translate(0, 1.27, -0.05), (x, y, z) => (y > 1.3 || (z < -0.1 && y > 1.2) ? 0.22 : 1)),
+    tint(new THREE.CylinderGeometry(0.048, 0.055, 0.1, 5, 1, true).translate(0, 1.15, -0.06), 1), // neck
+  ]);
+  return { body, head };
+}
+
+// Muted clothing so the crowd never competes with the bright price colours
+const SHIRTS = ['#1f2a44', '#2b2f36', '#b9b6ae', '#3d4f63', '#5a3232', '#2f4a3a', '#6b6f78', '#15171b', '#7d6e52', '#2c3e66', '#4a3d5c', '#9a978f']
+  .map((c) => new THREE.Color(c));
+const SKINS = ['#8d5524', '#c68642', '#e0ac69', '#f1c27d', '#ffdbac', '#5c3a21', '#a86b3c', '#d29a6a'].map((c) => new THREE.Color(c));
+
+// Show a spectator on every taken seat (called whenever availability changes).
+// `clearAround`: a position; seats within 1.3 m of it stay empty (the viewer's
+// neighbours and the person directly in front, whose heads would otherwise fill
+// the view-from-seat).
+const m4c = new THREE.Matrix4();
+const qc = new THREE.Quaternion();
+const upc = new THREE.Vector3(0, 1, 0);
+const sc3 = new THREE.Vector3();
+export function fillCrowd(stadium, clearAround = null) {
+  for (const stand of stadium.stands.values()) {
+    const crowd = stand.crowd;
+    if (!crowd) continue;
+    let k = 0;
+    for (const s of stand.seats) {
+      if (!s.taken) continue;
+      if (clearAround && s.pos.distanceToSquared(clearAround) < 1.69) continue;
+      const r = jitter(s.index * 3.7 + 1.3);
+      qc.setFromAxisAngle(upc, Math.atan2(-s.outward.x, -s.outward.z) + (r - 0.5) * 0.35);
+      m4c.compose(s.pos, qc, sc3.setScalar(0.92 + jitter(s.index * 5.1) * 0.16));
+      crowd.body.setMatrixAt(k, m4c);
+      crowd.head.setMatrixAt(k, m4c);
+      crowd.body.setColorAt(k, SHIRTS[Math.floor(jitter(s.index * 7.3) * SHIRTS.length)]);
+      crowd.head.setColorAt(k, SKINS[Math.floor(jitter(s.index * 11.9) * SKINS.length)]);
+      k++;
+    }
+    for (const m of [crowd.body, crowd.head]) {
+      m.count = k;
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
+  }
+}
+
 // Stadium seat. 'high': moulded plastic bucket seat (curved pan + reclined back,
 // rounded edges) on a dark metal pedestal. 'low': simple boxes for phones.
 function chairGeometry(detail = 'high') {
@@ -170,6 +249,11 @@ export function buildStadium(config, { quality = 'high' } = {}) {
   // Level of detail: every stand starts with the light seat; the viewer swaps in
   // the detailed one for stands close to the camera (see StadiumViewer.updateDetail)
   const chairs = { near: chairGeometry(high ? 'high' : 'low'), far: chairGeometry('far') };
+  // Spectators on taken seats (detailed figures only on 'high', near the camera)
+  const farPeople = personGeometry('far');
+  const people = { near: high ? personGeometry('near') : farPeople, far: farPeople };
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, vertexColors: true });
+  const headMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6, vertexColors: true });
   const chair = chairs.far;
   // Glossy moulded plastic; vertex colours keep the pedestal dark
   const seatMat = new THREE.MeshStandardMaterial({
@@ -303,6 +387,27 @@ export function buildStadium(config, { quality = 'high' } = {}) {
     mesh.receiveShadow = true; // seats receive stand/roof shadows; they don't cast (too costly)
     group.add(mesh);
     meshes.push(mesh);
+
+    // Crowd for this stand: one slot per seat, filled by fillCrowd() with the taken seats.
+    // Bounding spheres are computed with a person on every seat so culling stays correct.
+    const body = new THREE.InstancedMesh(people.far.body, bodyMat, ls.seats.length);
+    const head = new THREE.InstancedMesh(people.far.head, headMat, ls.seats.length);
+    const white = new THREE.Color('#ffffff');
+    stand.seats.forEach((s, i) => {
+      mesh.getMatrixAt(i, m4);
+      body.setMatrixAt(i, m4);
+      head.setMatrixAt(i, m4);
+      body.setColorAt(i, white);
+      head.setColorAt(i, white);
+    });
+    body.computeBoundingSphere();
+    head.computeBoundingSphere();
+    body.count = 0;
+    head.count = 0;
+    body.receiveShadow = true;
+    head.receiveShadow = true;
+    stand.crowd = { body, head };
+    group.add(body, head);
 
     // Camera framing for the stand view
     stand.capacity = stand.seats.length;
@@ -512,7 +617,7 @@ export function buildStadium(config, { quality = 'high' } = {}) {
   }
 
   return {
-    config, group, stands, seats, seatById, meshes, roofGroup, screens, animated, lamps, indoor, fx, chairs, beams,
+    config, group, stands, seats, seatById, meshes, roofGroup, screens, animated, lamps, indoor, fx, chairs, beams, people,
     extent: Math.max(a, b) + maxD + 12,
   };
 }
@@ -629,6 +734,10 @@ function pavilionBuilding(base, idx, stand, sc) {
 export function disposeStadium(stadium) {
   stadium.chairs?.near.dispose();
   stadium.chairs?.far.dispose();
+  for (const g of [stadium.people?.near, stadium.people?.far]) {
+    g?.body.dispose();
+    g?.head.dispose();
+  }
   stadium.group.traverse((o) => {
     o.geometry?.dispose();
     for (const m of [].concat(o.material || [])) {
