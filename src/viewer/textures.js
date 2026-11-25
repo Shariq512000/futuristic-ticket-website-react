@@ -38,6 +38,23 @@ function drawGrass(g, w, h, L, stripeM = 9) {
     g.fillRect((i * w) / stripes, 0, w / stripes + 1, h);
   }
   const rnd = rng(5);
+  // Fine blade texture: short strokes along the mowing direction
+  for (let i = 0; i < 26000; i++) {
+    const x = rnd() * w;
+    const y = rnd() * h;
+    g.strokeStyle = rnd() < 0.5 ? 'rgba(10,40,12,0.10)' : 'rgba(170,220,150,0.07)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + (rnd() - 0.5) * 2, y + 3 + rnd() * 4);
+    g.stroke();
+  }
+  // Slightly darker, worn edges
+  const vg = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.62);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.22)');
+  g.fillStyle = vg;
+  g.fillRect(0, 0, w, h);
   for (let i = 0; i < 9000; i++) {
     g.fillStyle = `rgba(${rnd() < 0.5 ? '0,0,0' : '255,255,255'},0.035)`;
     g.fillRect(rnd() * w, rnd() * h, 3, 3);
@@ -291,6 +308,33 @@ export function windowTexture() {
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   return t;
+}
+
+// Soft round glow for floodlight heads (used with additive blending).
+export function glowTexture() {
+  const t = makeTexture(128, 128, (g, w, h) => {
+    const grd = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    grd.addColorStop(0, 'rgba(255,250,235,1)');
+    grd.addColorStop(0.18, 'rgba(255,245,220,0.55)');
+    grd.addColorStop(0.5, 'rgba(255,240,210,0.12)');
+    grd.addColorStop(1, 'rgba(255,240,210,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, w, h);
+  });
+  return t;
+}
+
+// Vertical fade for floodlight beams (bright at the lamp, transparent at the ground).
+export function beamTexture() {
+  return makeTexture(4, 128, (g, w, h) => {
+    const grd = g.createLinearGradient(0, 0, 0, h);
+    // Canvas top = tip of the cone (at the lamp): brightest there, fading towards the ground
+    grd.addColorStop(0, 'rgba(255,248,230,0.9)');
+    grd.addColorStop(0.4, 'rgba(255,248,230,0.3)');
+    grd.addColorStop(1, 'rgba(255,248,230,0.0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, w, h);
+  });
 }
 
 export function floodlightTexture() {

@@ -5,11 +5,50 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { computeLayout, arcPoints, nearestIndex } from '../../shared/layout.js';
 import {
-  bandTexture, fieldTexture, pitchTexture, windowTexture, floodlightTexture,
+  bandTexture, fieldTexture, pitchTexture, windowTexture, floodlightTexture, glowTexture, beamTexture,
 } from './textures.js';
 
 const DEG = Math.PI / 180;
 const ds = THREE.DoubleSide;
+
+// Small deterministic 0..1 noise per seat, for natural colour variation.
+const jitter = (i) => {
+  const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+// Point and unit tangent at arc length s along arcPoints() output.
+function pointAtS(P, s) {
+  let k = 0;
+  while (k < P.n - 2 && P.s[k + 1] < s) k++;
+  const f = (s - P.s[k]) / (P.s[k + 1] - P.s[k] || 1);
+  const tx = P.x[k + 1] - P.x[k];
+  const tz = P.z[k + 1] - P.z[k];
+  const tl = Math.hypot(tx, tz) || 1;
+  return { x: P.x[k] + tx * f, z: P.z[k] + tz * f, tx: tx / tl, tz: tz / tl };
+}
+
+// Collects box instances (position, yaw along a tangent, size) for one InstancedMesh.
+class BoxInstances {
+  constructor() { this.items = []; }
+
+  add(x, y, z, tx, tz, sx, sy, sz) { this.items.push([x, y, z, Math.atan2(-tz, tx), sx, sy, sz]); }
+
+  mesh(material) {
+    if (!this.items.length) return null;
+    const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material, this.items.length);
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    this.items.forEach(([x, y, z, yaw, sx, sy, sz], i) => {
+      m.setMatrixAt(i, m4.compose(p.set(x, y, z), q.setFromAxisAngle(up, yaw), s.set(sx, sy, sz)));
+    });
+    m.computeBoundingSphere();
+    return m;
+  }
+}
 
 class Builder {
   constructor() {
@@ -50,12 +89,55 @@ class Builder {
   }
 }
 
-function chairGeometry() {
-  const seat = new THREE.BoxGeometry(0.46, 0.09, 0.42).translate(0, 0.44, 0.02);
-  const back = new THREE.BoxGeometry(0.46, 0.5, 0.07).translate(0, 0.72, -0.19);
-  const legL = new THREE.BoxGeometry(0.05, 0.4, 0.34).translate(-0.2, 0.2, 0);
-  const legR = new THREE.BoxGeometry(0.05, 0.4, 0.34).translate(0.2, 0.2, 0);
-  return mergeGeometries([seat, back, legL, legR]);
+// Paint a whole geometry one vertex colour (multiplied by each seat's instance colour).
+function tint(geo, value) {
+  const n = geo.attributes.position.count;
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(new Array(n * 3).fill(value), 3));
+  return geo;
+}
+
+// Stadium seat. 'high': moulded plastic bucket seat (curved pan + reclined back,
+// rounded edges) on a dark metal pedestal. 'low': simple boxes for phones.
+function chairGeometry(detail = 'high') {
+  if (detail === 'far') {
+    // Seen from far away a seat is a few pixels: seat pan + backrest only (24 triangles)
+    return mergeGeometries([
+      new THREE.BoxGeometry(0.46, 0.08, 0.42).translate(0, 0.44, 0.02),
+      new THREE.BoxGeometry(0.46, 0.46, 0.07).translate(0, 0.68, -0.2),
+    ].map((g) => tint(g, 1)));
+  }
+  if (detail === 'low') {
+    const parts = [
+      new THREE.BoxGeometry(0.46, 0.09, 0.42).translate(0, 0.44, 0.02),
+      new THREE.BoxGeometry(0.46, 0.5, 0.07).translate(0, 0.72, -0.19),
+      new THREE.BoxGeometry(0.05, 0.4, 0.34).translate(-0.2, 0.2, 0),
+      new THREE.BoxGeometry(0.05, 0.4, 0.34).translate(0.2, 0.2, 0),
+    ].map((g) => tint(g, 1));
+    return mergeGeometries(parts);
+  }
+  // Side profile in (u = backwards, v = up); extruded across the seat width
+  const s = new THREE.Shape();
+  s.moveTo(-0.215, 0.405); // front lip, underside
+  s.lineTo(-0.225, 0.455); // front lip, top
+  s.lineTo(0.02, 0.448); // dip of the seat pan
+  s.lineTo(0.12, 0.468); // back of the pan
+  s.lineTo(0.175, 0.62); // lumbar curve
+  s.lineTo(0.2, 0.9); // top of backrest, front
+  s.lineTo(0.245, 0.89); // top of backrest, rear
+  s.lineTo(0.215, 0.6);
+  s.lineTo(0.165, 0.45);
+  s.lineTo(0.11, 0.418);
+  s.lineTo(-0.215, 0.405);
+  const shell = new THREE.ExtrudeGeometry(s, {
+    depth: 0.4, bevelEnabled: true, bevelThickness: 0.022, bevelSize: 0.012, bevelSegments: 1, curveSegments: 1,
+  });
+  shell.rotateY(Math.PI / 2); // u → -z (front faces +z), extrusion → x
+  shell.translate(-0.2, 0, 0);
+  const pedestal = new THREE.BoxGeometry(0.07, 0.42, 0.07).translate(0, 0.21, -0.06);
+  const foot = new THREE.BoxGeometry(0.2, 0.02, 0.16).translate(0, 0.01, -0.06);
+  const parts = [tint(shell.toNonIndexed(), 1), tint(pedestal.toNonIndexed(), 0.22), tint(foot.toNonIndexed(), 0.22)];
+  for (const p of parts) p.clearGroups();
+  return mergeGeometries(parts);
 }
 
 function bandMesh(points, y0, y1, parts, opts) {
@@ -67,18 +149,35 @@ function bandMesh(points, y0, y1, parts, opts) {
 }
 
 // ---------------------------------------------------------------------------
-export function buildStadium(config) {
+export function buildStadium(config, { quality = 'high' } = {}) {
   const group = new THREE.Group();
   group.name = config.id;
+  const high = quality === 'high';
   const sport = config.sport || 'cricket';
   const field = config.field || {};
   const layout = computeLayout(config);
   const { base, a, b, maxD } = layout;
 
+  // Treads (walked on, lighter) and risers/walls (vertical, darker) read as real concrete steps
   const concrete = new Builder();
-  const structureMat = new THREE.MeshStandardMaterial({ color: '#1c2026', roughness: 0.9, side: ds });
-  const chair = chairGeometry();
-  const seatMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.55, metalness: 0.05 });
+  const risers = new Builder();
+  const glass = new Builder();
+  const rails = new Builder();
+  const aisleSteps = new BoxInstances();
+  const nosing = new BoxInstances();
+  const structureMat = new THREE.MeshStandardMaterial({ color: '#2b2f36', roughness: 0.92, side: ds });
+  const riserMat = new THREE.MeshStandardMaterial({ color: '#181b20', roughness: 0.95, side: ds });
+  // Level of detail: every stand starts with the light seat; the viewer swaps in
+  // the detailed one for stands close to the camera (see StadiumViewer.updateDetail)
+  const chairs = { near: chairGeometry(high ? 'high' : 'low'), far: chairGeometry('far') };
+  const chair = chairs.far;
+  // Glossy moulded plastic; vertex colours keep the pedestal dark
+  const seatMat = new THREE.MeshStandardMaterial({
+    color: '#ffffff', roughness: high ? 0.38 : 0.55, metalness: 0, vertexColors: true,
+  });
+  const animated = [];
+  const fx = []; // glow/beam effects: skipped by the ambient-occlusion pass
+  const beams = []; // floodlight beams: only shown from high views (side-on they look like lines)
   const roofGroup = new THREE.Group();
   const roofStands = new Set([...(config.extras?.roof?.stands || []), ...config.stands.filter((s) => s.roof).map((s) => s.id)]);
 
@@ -108,14 +207,47 @@ export function buildStadium(config) {
           const dOut = d0 + rr * t.depth + t.depth / 2;
           const A = arcPoints(base, idx, dIn);
           concrete.strip(A, y, arcPoints(base, idx, dOut), y);
-          if (rr > 0) concrete.strip(A, y - t.rise, A, y);
+          if (rr > 0) risers.strip(A, y - t.rise, A, y);
           for (const k of ends) {
             const p = (d, yy) => [base.px[k] + base.nx[k] * d, yy, base.pz[k] + base.nz[k] * d];
-            concrete.quad(p(dIn, 0), p(dOut, 0), p(dOut, y), p(dIn, y));
+            risers.quad(p(dIn, 0), p(dOut, 0), p(dOut, y), p(dIn, y));
+          }
+
+          // Aisle stairs between seat blocks: a half-height step on each row plus
+          // yellow safety edges, at the same block boundaries the seats use
+          if (high) {
+            const dc = d0 + rr * t.depth;
+            const P = arcPoints(base, idx, dc);
+            const L = P.s[P.n - 1];
+            const usable = L - 2 * t.edge;
+            const blockLen = usable / tier.blocks;
+            // Stairs between blocks, plus side stairs in the walkway at each end of the stand
+            const spots = [];
+            for (let k = 1; k < tier.blocks; k++) spots.push([t.edge + k * blockLen, Math.max(0.6, t.aisle * 0.85)]);
+            if (t.edge >= 0.8) spots.push([t.edge / 2, t.edge * 0.8], [L - t.edge / 2, t.edge * 0.8]);
+            for (const [sAt, w] of spots) {
+              const at = pointAtS(P, sAt);
+              // Outward normal at this point = tangent rotated 90° (same rule as the base curve)
+              const nx = at.tz;
+              const nz = -at.tx;
+              const place = (dd, yy, h, depth, list) => list.add(at.x + nx * dd, yy, at.z + nz * dd, at.tx, at.tz, w, h, depth);
+              // Light tread for the aisle at this row, a half-height step on its back half
+              place(0, y + 0.01, 0.02, t.depth, aisleSteps);
+              if (rr < rows - 1 && t.rise > 0) place(t.depth / 4, y + t.rise / 4, t.rise / 2, t.depth / 2, aisleSteps);
+              place(-t.depth / 2 + 0.05, y + 0.024, 0.012, 0.1, nosing);
+              if (rr < rows - 1 && t.rise > 0) place(0.05, y + t.rise / 2 + 0.006, 0.012, 0.1, nosing);
+            }
           }
         }
         const back = arcPoints(base, idx, dEnd);
-        concrete.strip(back, 0, back, yTop + 1.1);
+        risers.strip(back, 0, back, yTop + 1.1);
+
+        // Glass safety barrier with a metal top rail along the front of upper tiers
+        if (high && tier.prevTop != null) {
+          const front = arcPoints(base, idx, d0 - t.depth / 2 - 0.3);
+          glass.strip(front, y0, front, y0 + 0.95);
+          rails.strip(front, y0 + 0.95, arcPoints(base, idx, d0 - t.depth / 2 - 0.22), y0 + 0.95);
+        }
 
         // Front fascia LED band with the tier/stand name
         const fasciaD = d0 - t.depth / 2 - 0.3;
@@ -129,13 +261,19 @@ export function buildStadium(config) {
         const roofGeo = new Builder()
           .strip(arcPoints(base, idx, d0 - 4), roofY, arcPoints(base, idx, dEnd + 1), roofY + 1.5)
           .geometry();
-        roofGroup.add(new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({
-          color: '#d9dde3', roughness: 0.4, metalness: 0.3, side: ds, transparent: true,
-        })));
+        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({
+          color: '#d9dde3', roughness: 0.35, metalness: 0.5, side: ds, transparent: true,
+        }));
+        roof.castShadow = true;
+        roofGroup.add(roof);
       }
     }
 
-    if (sc.type === 'pavilion') group.add(pavilionBuilding(base, idx, stand, sc));
+    if (sc.type === 'pavilion') {
+      const building = pavilionBuilding(base, idx, stand, sc);
+      building.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      group.add(building);
+    }
 
     // Seats: one instanced mesh per stand (cheap ray tests via per-stand bounding sphere)
     const mesh = new THREE.InstancedMesh(chair, seatMat, ls.seats.length);
@@ -150,6 +288,7 @@ export function buildStadium(config) {
         index: seats.length, local: i, mesh, stand,
         pos: new THREE.Vector3(ss.x, ss.y, ss.z),
         outward: new THREE.Vector3(ss.nx, 0, ss.nz),
+        shade: 0.9 + jitter(seats.length) * 0.14, // slight per-seat colour variation (fading, dust)
         price: 0, taken: false,
       };
       q.setFromAxisAngle(up, Math.atan2(-ss.nx, -ss.nz));
@@ -161,6 +300,7 @@ export function buildStadium(config) {
       seatById.set(seat.id, seat);
     });
     mesh.computeBoundingSphere();
+    mesh.receiveShadow = true; // seats receive stand/roof shadows; they don't cast (too costly)
     group.add(mesh);
     meshes.push(mesh);
 
@@ -183,7 +323,26 @@ export function buildStadium(config) {
     stands.set(stand.id, stand);
   }
 
-  group.add(new THREE.Mesh(concrete.geometry(), structureMat));
+  const treadMesh = new THREE.Mesh(concrete.geometry(), structureMat);
+  const riserMesh = new THREE.Mesh(risers.geometry(), riserMat);
+  for (const m of [treadMesh, riserMesh]) {
+    m.castShadow = true;
+    m.receiveShadow = true;
+    group.add(m);
+  }
+  if (glass.idx.length) {
+    const glassMesh = new THREE.Mesh(glass.geometry(), new THREE.MeshStandardMaterial({
+      color: '#a9c8e8', transparent: true, opacity: 0.16, roughness: 0.05, metalness: 0.2, side: ds, depthWrite: false,
+    }));
+    group.add(glassMesh);
+    fx.push(glassMesh);
+    group.add(new THREE.Mesh(rails.geometry(), new THREE.MeshStandardMaterial({ color: '#c9ced6', roughness: 0.3, metalness: 0.8, side: ds })));
+  }
+  // Aisles read as lighter stripes running up the stand, with bright yellow step edges
+  const steps = aisleSteps.mesh(new THREE.MeshStandardMaterial({ color: '#5a606b', roughness: 0.85 }));
+  if (steps) { steps.receiveShadow = true; group.add(steps); }
+  const edges = nosing.mesh(new THREE.MeshStandardMaterial({ color: '#e9b92c', emissive: '#1e1600', roughness: 0.7 }));
+  if (edges) group.add(edges);
   group.add(roofGroup);
 
   // ---- Field ---------------------------------------------------------------
@@ -200,14 +359,38 @@ export function buildStadium(config) {
     new THREE.MeshStandardMaterial({ map: surface, roughness: sport === 'basketball' ? 0.35 : 0.95 }),
   );
   fieldMesh.position.y = 0.05;
+  fieldMesh.receiveShadow = true;
   group.add(fieldMesh);
 
   const all = [...Array(base.M).keys(), 0];
   const indoor = sport === 'basketball' || config.extras?.indoor;
-  const surround = new Builder().strip(arcPoints(base, all, 0), 0.0, arcPoints(base, all, 4.5), 0.0).geometry();
-  group.add(new THREE.Mesh(surround, new THREE.MeshStandardMaterial({
-    color: indoor ? '#11151d' : '#244a2a', roughness: 1, side: ds,
-  })));
+  const surroundMesh = new THREE.Mesh(
+    new Builder().strip(arcPoints(base, all, 0), 0.0, arcPoints(base, all, 4.5), 0.0).geometry(),
+    new THREE.MeshStandardMaterial({ color: indoor ? '#11151d' : '#244a2a', roughness: 1, side: ds }),
+  );
+  surroundMesh.receiveShadow = true;
+  group.add(surroundMesh);
+
+  // LED advertising boards around the playing area (outdoor grounds), scrolling slowly
+  if (high && !indoor) {
+    const boardD = Math.min(1.2, ...config.stands.map((s) => (s.frontGap ?? 4) - 1.2));
+    if (boardD > 0.2) {
+      const tex = bandTexture([
+        ['MATCH TICKETS', 'fg'], ['BOOK YOUR EXACT SEAT ONLINE', 'accent'], ['◆', 'dim'],
+        ['SEE THE VIEW BEFORE YOU BUY', 'fg'], ['◆', 'dim'],
+      ], { bg: '#04060a', fg: '#ffffff', accent: '#f5c451' });
+      const ring = arcPoints(base, all, boardD);
+      const boardGeo = new Builder().strip(ring, 0.05, ring, 0.95, 1 / (32 * 0.9)).geometry();
+      // Strip faces point outward, so the field-facing (inner) side is the back side:
+      // the LED text faces the field; spectators behind see a plain dark back.
+      const face = new THREE.Mesh(boardGeo, new THREE.MeshStandardMaterial({
+        map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.9, roughness: 0.4, side: THREE.BackSide,
+      }));
+      const back = new THREE.Mesh(boardGeo, new THREE.MeshStandardMaterial({ color: '#15181d', roughness: 0.8, side: THREE.FrontSide }));
+      group.add(face, back);
+      animated.push({ texture: tex, speed: 0.012 });
+    }
+  }
   const ground = new THREE.Mesh(
     new THREE.CircleGeometry(600, 64).rotateX(-Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: '#0a0d0b', roughness: 1 }),
@@ -249,12 +432,16 @@ export function buildStadium(config) {
   // ---- Floodlights -----------------------------------------------------------
   const fl = config.extras?.floodlights;
   const towers = typeof fl === 'object' ? fl.towers : fl;
+  const lamps = [];
   if (towers) {
     const headTex = floodlightTexture();
-    const poleMat = new THREE.MeshStandardMaterial({ color: '#5d646e', metalness: 0.5, roughness: 0.5 });
+    const glow = high ? glowTexture() : null;
+    const beam = high ? beamTexture() : null;
+    const poleMat = new THREE.MeshStandardMaterial({ color: '#5d646e', metalness: 0.6, roughness: 0.45 });
     const headMat = new THREE.MeshStandardMaterial({
       map: headTex, emissiveMap: headTex, emissive: '#ffffff', emissiveIntensity: 2.2,
     });
+    const frameMat = new THREE.MeshStandardMaterial({ color: '#2a2e35', metalness: 0.6, roughness: 0.5 });
     for (let i = 0; i < towers; i++) {
       const angle = (360 / towers) * i + 180 / towers;
       const k = nearestIndex(base, angle);
@@ -264,10 +451,42 @@ export function buildStadium(config) {
       const h = 55;
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.4, h, 10), poleMat);
       pole.position.set(x, h / 2, z);
+      pole.castShadow = true;
       const head = new THREE.Mesh(new THREE.BoxGeometry(12, 7, 1), headMat);
       head.position.set(x, h + 2, z);
       head.lookAt(0, 0, 0);
-      group.add(pole, head);
+      // Dark frame behind the lamp panel
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(12.8, 7.8, 0.8), frameMat);
+      frame.position.copy(head.position).addScaledVector(new THREE.Vector3(x, 0, z).normalize(), 0.7);
+      frame.quaternion.copy(head.quaternion);
+      group.add(pole, head, frame);
+      lamps.push(new THREE.Vector3(x, h + 2, z));
+
+      if (high) {
+        // Soft glow around the lamps
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: glow, color: '#fff6e0', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+        }));
+        sprite.position.copy(head.position).addScaledVector(new THREE.Vector3(-x, 0, -z).normalize(), 1.5);
+        sprite.scale.setScalar(34);
+        group.add(sprite);
+        fx.push(sprite);
+        // Faint light beam towards the field (brightest at the lamp)
+        const lamp = head.position.clone();
+        const target = new THREE.Vector3(x * 0.25, 0, z * 0.25);
+        const len = lamp.distanceTo(target);
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry(len * 0.22, len, 24, 1, true),
+          new THREE.MeshBasicMaterial({
+            map: beam, transparent: true, opacity: 0.028, blending: THREE.AdditiveBlending, depthWrite: false, side: ds, fog: false,
+          }),
+        );
+        cone.position.copy(lamp).lerp(target, 0.5);
+        cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), lamp.clone().sub(target).normalize());
+        group.add(cone);
+        fx.push(cone);
+        beams.push(cone);
+      }
     }
   }
 
@@ -293,7 +512,7 @@ export function buildStadium(config) {
   }
 
   return {
-    config, group, stands, seats, seatById, meshes, roofGroup, screens,
+    config, group, stands, seats, seatById, meshes, roofGroup, screens, animated, lamps, indoor, fx, chairs, beams,
     extent: Math.max(a, b) + maxD + 12,
   };
 }
@@ -400,13 +619,16 @@ function pavilionBuilding(base, idx, stand, sc) {
     const p = (d, y) => [base.px[k] + base.nx[k] * d, y, base.pz[k] + base.nz[k] * d];
     shell.quad(p(d0, 0), p(d1, 0), p(d1, H), p(d0, H));
   }
-  g.add(new THREE.Mesh(shell.geometry(), new THREE.MeshStandardMaterial({ color: '#e6e1d6', roughness: 0.7, side: ds })));
+  // Off-white cladding, dark enough not to blow out under the floodlights + bloom
+  g.add(new THREE.Mesh(shell.geometry(), new THREE.MeshStandardMaterial({ color: '#9c988f', roughness: 0.8, side: ds })));
   const lip = new Builder().strip(arcPoints(base, idx, d0 - 3), H, arcPoints(base, idx, d0), H).geometry();
-  g.add(new THREE.Mesh(lip, new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.6, side: ds })));
+  g.add(new THREE.Mesh(lip, new THREE.MeshStandardMaterial({ color: '#b3aea4', roughness: 0.6, side: ds })));
   return g;
 }
 
 export function disposeStadium(stadium) {
+  stadium.chairs?.near.dispose();
+  stadium.chairs?.far.dispose();
   stadium.group.traverse((o) => {
     o.geometry?.dispose();
     for (const m of [].concat(o.material || [])) {

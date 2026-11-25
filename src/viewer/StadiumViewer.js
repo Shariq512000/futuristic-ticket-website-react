@@ -10,6 +10,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { gsap } from 'gsap';
 import { buildStadium, disposeStadium } from './stadium.js';
 import { screenTexture } from './textures.js';
@@ -21,8 +23,58 @@ const COL = { taken: new THREE.Color('#353941'), hover: new THREE.Color('#ffffff
 const lookDir = (yaw, pitch, out = new THREE.Vector3()) =>
   out.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
+// 'high' on desktops; 'low' on phones/tablets and small or weak devices.
+// Override with ?quality=low|high in the page URL.
+export function detectQuality() {
+  const forced = new URLSearchParams(window.location.search).get('quality');
+  if (forced === 'low' || forced === 'high') return forced;
+  const touch = window.matchMedia?.('(pointer: coarse)').matches;
+  const small = Math.min(window.screen.width, window.screen.height) < 700;
+  const weak = (navigator.hardwareConcurrency || 8) <= 4;
+  return touch || small || weak ? 'low' : 'high';
+}
+
+// Night sky: dark zenith, warm city glow at the horizon, a few stars. Follows the camera.
+function makeSky() {
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    uniforms: {
+      top: { value: new THREE.Color('#020309') },
+      mid: { value: new THREE.Color('#070b16') },
+      horizon: { value: new THREE.Color('#2a2430') },
+    },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 top; uniform vec3 mid; uniform vec3 horizon;
+      varying vec3 vDir;
+      float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      void main() {
+        float h = vDir.y;
+        vec3 c = mix(horizon, mid, smoothstep(0.0, 0.22, h));
+        c = mix(c, top, smoothstep(0.22, 0.85, h));
+        float star = step(0.9986, hash(floor(vDir * 420.0))) * smoothstep(0.08, 0.35, h);
+        c += vec3(star) * 0.55;
+        if (h < 0.0) c = horizon * 0.5;
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 16), mat);
+  sky.frustumCulled = false;
+  sky.renderOrder = -1;
+  return sky;
+}
+
 export class StadiumViewer {
-  constructor(container, { onChange = () => {}, onHover = () => {}, onSeatArrived = () => {} } = {}) {
+  constructor(container, {
+    onChange = () => {}, onHover = () => {}, onSeatArrived = () => {}, quality,
+  } = {}) {
     this.container = container;
     this.onChange = onChange;
     this.onHover = onHover;
@@ -41,31 +93,78 @@ export class StadiumViewer {
     this.flight = null;
     this.alive = true;
 
+    this.quality = quality || detectQuality();
+    const high = this.quality === 'high';
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer = new THREE.WebGLRenderer({ antialias: !high, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, high ? 2 : 1.5));
     this.renderer.setSize(w, h);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.0;
+    if (high) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
     container.appendChild(this.renderer.domElement);
     this.canvas = this.renderer.domElement;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#05070c');
+    this.scene.fog = new THREE.FogExp2('#0a0f18', 0.00055);
     this.camera = new THREE.PerspectiveCamera(40, w / h, 0.25, 2500);
-    this.scene.add(new THREE.HemisphereLight('#c9d8ff', '#22301f', 1.4));
-    const sun = new THREE.DirectionalLight('#ffffff', 1.6);
-    sun.position.set(60, 120, 80);
-    const fieldLight = new THREE.SpotLight('#fff8e8', 1.2, 0, 0.9, 0.8, 0);
-    fieldLight.position.set(0, 90, 0);
-    this.scene.add(sun, fieldLight, fieldLight.target);
 
-    this.composer = new EffectComposer(this.renderer);
+    // Image-based lighting: soft reflections on seats, glass and metal
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    this.scene.environment = this.envMap;
+    this.scene.environmentIntensity = 0.32;
+
+    this.scene.add(new THREE.HemisphereLight('#c9d8ff', '#22301f', 0.95));
+    // Key light = the floodlights; casts the stand/roof shadows onto the field
+    this.key = new THREE.DirectionalLight('#fff6e6', 2.1);
+    this.key.position.set(60, 120, 80);
+    this.key.castShadow = high;
+    this.key.shadow.mapSize.set(4096, 4096);
+    this.key.shadow.bias = -0.0004;
+    this.key.shadow.normalBias = 0.06;
+    this.fill = new THREE.DirectionalLight('#dfe8ff', 0.55);
+    this.fill.position.set(-80, 90, -60);
+    const fieldLight = new THREE.SpotLight('#fff8e8', 1.0, 0, 0.9, 0.8, 0);
+    fieldLight.position.set(0, 90, 0);
+    this.scene.add(this.key, this.key.target, this.fill, fieldLight, fieldLight.target);
+    this.sky = makeSky();
+    this.scene.add(this.sky);
+
+    // Post-processing: multisampled render target (smooth edges), ambient occlusion, bloom
+    const target = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: high ? 4 : 0 });
+    this.composer = new EffectComposer(this.renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    if (high) {
+      // Ambient occlusion is soft, so it runs at half resolution (about a quarter of the cost)
+      const dpr = this.renderer.getPixelRatio();
+      this.ao = new GTAOPass(this.scene, this.camera, (w * dpr) / 2, (h * dpr) / 2);
+      const aoSetSize = this.ao.setSize.bind(this.ao);
+      this.ao.setSize = (sw, sh) => aoSetSize(Math.max(1, Math.round(sw / 2)), Math.max(1, Math.round(sh / 2)));
+      this.ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.5, thickness: 1.2, scale: 1.1, samples: 8 });
+      this.ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 5, rings: 2, samples: 8 });
+      this.ao.blendIntensity = 0.85;
+      // Skip glow/beam/glass effects when computing occlusion
+      const render = this.ao.render.bind(this.ao);
+      this.ao.render = (...args) => {
+        const fx = this.stadium?.fx || [];
+        const was = fx.map((o) => o.visible);
+        for (const o of fx) o.visible = false;
+        render(...args);
+        fx.forEach((o, i) => { o.visible = was[i]; });
+      };
+      this.composer.addPass(this.ao);
+    }
     this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.35, 0.6, 0.86);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.clock = new THREE.Clock();
 
     this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.target = this.view.target;
@@ -90,8 +189,9 @@ export class StadiumViewer {
         this.scene.remove(this.stadium.group);
         disposeStadium(this.stadium);
       }
-      this.stadium = buildStadium(stadiumConfig);
+      this.stadium = buildStadium(stadiumConfig, { quality: this.quality });
       this.scene.add(this.stadium.group);
+      this.fitLights();
     }
     this.applyPrices();
     for (const s of this.stadium.seats) s.taken = false;
@@ -103,6 +203,21 @@ export class StadiumViewer {
     }
     this.resetFocus('overview');
     this.flyTo(p.pos, p.target, p.fov, rebuild ? 2.6 : 1.4).then(() => this.state.mode === 'overview' && this.setControls('overview'));
+  }
+
+  // Aim the shadow-casting key light from the first floodlight tower and fit its
+  // shadow camera to the stadium.
+  fitLights() {
+    const { extent, lamps } = this.stadium;
+    const dir = lamps?.length ? lamps[0].clone().setY(0).normalize() : new THREE.Vector3(0.6, 0, 0.45).normalize();
+    this.key.position.set(dir.x * extent * 0.9, extent * 1.3, dir.z * extent * 0.9);
+    this.key.target.position.set(0, 0, 0);
+    const cam = this.key.shadow.camera;
+    Object.assign(cam, {
+      left: -extent * 1.1, right: extent * 1.1, top: extent * 1.1, bottom: -extent * 1.1, near: 1, far: extent * 4,
+    });
+    cam.updateProjectionMatrix();
+    this.fill.position.set(-dir.x * extent, extent, -dir.z * extent);
   }
 
   applyPrices() {
@@ -162,7 +277,7 @@ export class StadiumViewer {
     const { state, tmp } = this;
     if (s === state.selected) return tmp.copy(COL.selected);
     if (!s.taken && s === state.hoverSeat) return tmp.copy(COL.hover);
-    tmp.copy(s.taken ? COL.taken : this.bands[s.band].col);
+    tmp.copy(s.taken ? COL.taken : this.bands[s.band].col).multiplyScalar(s.shade ?? 1);
     if (s.stand.id === state.hoverStand) tmp.lerp(COL.hover, s.taken ? 0.12 : 0.4);
     else if (state.mode !== 'overview' && state.focus && s.stand.id !== state.focus) tmp.multiplyScalar(0.35);
     return tmp;
@@ -406,6 +521,27 @@ export class StadiumViewer {
     for (const m of stadium.roofGroup.children) {
       for (const mat of [].concat(m.material)) mat.opacity = o;
     }
+    this.updateDetail();
+    // Sky stays centred on the camera (infinitely far); LED boards scroll
+    this.sky.position.copy(camera.position);
+    const dt = Math.min(this.clock.getDelta(), 0.1);
+    for (const a of stadium.animated || []) a.texture.offset.x = (a.texture.offset.x + a.speed * dt) % 1;
+  }
+
+  // Detailed seats only for stands near the camera; ambient occlusion only in
+  // close-up views (from the overview it's invisible but doubles the cost).
+  updateDetail() {
+    const { stadium, camera } = this;
+    const { near, far } = stadium.chairs;
+    for (const m of stadium.meshes) {
+      const s = m.boundingSphere;
+      const dist = camera.position.distanceTo(s.center) - s.radius;
+      const geo = dist < 25 ? near : far;
+      if (m.geometry !== geo) m.geometry = geo;
+    }
+    if (this.ao) this.ao.enabled = this.state.mode !== 'overview' || camera.position.y < stadium.extent * 0.5;
+    const showBeams = camera.position.y > stadium.extent * 0.7;
+    for (const b of stadium.beams || []) b.visible = showBeams;
   }
 
   tick() {
@@ -431,6 +567,10 @@ export class StadiumViewer {
     for (const [target, type, fn, opts] of this.listeners) target.removeEventListener(type, fn, opts);
     this.controls.dispose();
     if (this.stadium) disposeStadium(this.stadium);
+    this.sky.geometry.dispose();
+    this.sky.material.dispose();
+    this.envMap.dispose();
+    this.ao?.dispose();
     this.composer.dispose?.();
     this.renderer.dispose();
     this.canvas.remove();
