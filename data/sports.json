@@ -1,0 +1,9 @@
+{
+  "_note": "Sports shown on the home page, in this order. A sport with no upcoming matches still shows, with an empty state.",
+  "sports": [
+    { "id": "cricket", "name": "Cricket", "tagline": "ODIs, T20s and Tests" },
+    { "id": "football", "name": "Football", "tagline": "League and cup fixtures" },
+    { "id": "basketball", "name": "Basketball", "tagline": "Indoor arena games" },
+    { "id": "hockey", "name": "Hockey", "tagline": "Field hockey" }
+  ]
+}

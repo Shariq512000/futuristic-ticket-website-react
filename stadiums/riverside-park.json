@@ -1,0 +1,39 @@
+{
+  "id": "riverside-park",
+  "name": "Riverside Park",
+  "sport": "football",
+  "sample": true,
+  "_note": "Fictional sample football ground: four separate stands with roofs, main stand with boxes. Angles: 0 = east goal end, clockwise from above.",
+  "city": "Sample City",
+
+  "field": { "length": 124, "width": 88, "superellipse": 8 },
+
+  "stands": [
+    {
+      "id": "main-stand", "name": "Main Stand", "type": "pavilion", "floors": 3,
+      "from": 39, "to": 141, "roof": true, "frontGap": 3,
+      "tiers": [
+        { "key": "lower", "name": "Main Stand Lower", "capacity": 5200 },
+        { "key": "vvip", "name": "Directors' Seats", "capacity": 600 },
+        { "key": "boxes", "name": "Executive Boxes", "capacity": 400, "boxes": 16 }
+      ]
+    },
+    {
+      "id": "south-end", "name": "South End", "from": 147, "to": 213, "roof": true, "frontGap": 3,
+      "tiers": [{ "key": "lower", "name": "South End", "capacity": 6500, "rise": 0.5 }]
+    },
+    {
+      "id": "east-stand", "name": "East Stand", "from": 219, "to": 321, "roof": true, "frontGap": 3,
+      "tiers": [
+        { "key": "lower", "name": "East Stand Lower", "capacity": 4800 },
+        { "key": "upper", "name": "East Stand Upper", "capacity": 4800, "rise": 0.55 }
+      ]
+    },
+    {
+      "id": "north-end", "name": "North End", "from": 327, "to": 33, "roof": true, "frontGap": 3,
+      "tiers": [{ "key": "lower", "name": "North End", "capacity": 6500, "rise": 0.5 }]
+    }
+  ],
+
+  "extras": { "floodlights": { "towers": 4 } }
+}

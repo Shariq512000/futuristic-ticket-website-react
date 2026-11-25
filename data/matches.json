@@ -1,0 +1,108 @@
+{
+  "_note": "Sample fixtures and prices (PKR) for the demo. 'sport' must match an id in sports.json. Prices: 'tiers' (stand.tier) overrides 'stands', which overrides 'default'. 'sold' is the share of seats shown as already sold.",
+  "currency": "PKR",
+  "matches": [
+    {
+      "id": "m01", "sport": "cricket", "competition": "Cricket World Cup", "stage": "Group A",
+      "title": "Pakistan vs New Zealand", "short": "PAK vs NZ", "home": "Pakistan", "away": "New Zealand",
+      "date": "2027-02-19T14:00:00+05:00", "stadiumId": "national-stadium-karachi", "sold": 0.55,
+      "prices": {
+        "default": 1500,
+        "stands": { "hanif-mohammad": 3500, "fazal-mahmood": 3500, "wasim-bari": 3500, "imran-khan": 2500, "wasim-akram": 2500, "younis-khan": 2000, "shahid-afridi": 2000, "nazar-mohammad": 2000 },
+        "tiers": { "pavilion.vvip": 25000, "pavilion.boxes": 60000 }
+      }
+    },
+    {
+      "id": "m02", "sport": "cricket", "competition": "Cricket World Cup", "stage": "Group B",
+      "title": "Australia vs South Africa", "short": "AUS vs SA", "home": "Australia", "away": "South Africa",
+      "date": "2027-02-25T14:00:00+05:00", "stadiumId": "national-stadium-karachi", "sold": 0.3,
+      "prices": {
+        "default": 1000,
+        "stands": { "hanif-mohammad": 2500, "fazal-mahmood": 2500, "wasim-bari": 2500, "imran-khan": 1800, "wasim-akram": 1800 },
+        "tiers": { "pavilion.vvip": 18000, "pavilion.boxes": 45000 }
+      }
+    },
+    {
+      "id": "m03", "sport": "cricket", "competition": "Cricket World Cup", "stage": "Group A",
+      "title": "England vs India", "short": "ENG vs IND", "home": "England", "away": "India",
+      "date": "2027-02-27T19:00:00+05:00", "stadiumId": "harbour-oval", "sold": 0.7,
+      "prices": {
+        "default": 2000,
+        "stands": { "north-stand": 3500, "city-end-stand": 3000, "south-stand": 3500 },
+        "tiers": { "north-stand.upper": 2500, "city-end-stand.upper": 2200, "south-stand.upper": 2500, "members-pavilion.vvip": 30000, "members-pavilion.boxes": 75000 }
+      }
+    },
+    {
+      "id": "m04", "sport": "cricket", "competition": "Cricket World Cup", "stage": "Semi-final 1",
+      "title": "Semi-final 1 (TBC vs TBC)", "short": "SEMI-FINAL 1", "home": "TBC", "away": "TBC",
+      "date": "2027-03-05T14:00:00+05:00", "stadiumId": "harbour-oval", "sold": 0.6,
+      "prices": {
+        "default": 3000,
+        "stands": { "north-stand": 5000, "city-end-stand": 4500, "south-stand": 5000 },
+        "tiers": { "members-pavilion.vvip": 40000, "members-pavilion.boxes": 95000 }
+      }
+    },
+    {
+      "id": "m05", "sport": "cricket", "competition": "Cricket World Cup", "stage": "Final",
+      "title": "Final (TBC vs TBC)", "short": "THE FINAL", "home": "TBC", "away": "TBC",
+      "date": "2027-03-09T14:00:00+05:00", "stadiumId": "national-stadium-karachi", "sold": 0.85,
+      "prices": {
+        "default": 5000,
+        "stands": { "hanif-mohammad": 9000, "fazal-mahmood": 9000, "wasim-bari": 9000, "imran-khan": 7000, "wasim-akram": 7000 },
+        "tiers": { "pavilion.vvip": 60000, "pavilion.boxes": 150000 }
+      }
+    },
+
+    {
+      "id": "f01", "sport": "football", "competition": "Sample League", "stage": "Matchday 14",
+      "title": "Riverside FC vs Harbour City", "short": "RIV vs HBC", "home": "Riverside FC", "away": "Harbour City",
+      "date": "2026-12-12T19:30:00+05:00", "stadiumId": "riverside-park", "sold": 0.5,
+      "prices": {
+        "default": 1200,
+        "stands": { "east-stand": 1500, "north-end": 900, "south-end": 900 },
+        "tiers": { "main-stand.vvip": 9000, "main-stand.boxes": 25000 }
+      }
+    },
+    {
+      "id": "f02", "sport": "football", "competition": "Sample League", "stage": "Matchday 16",
+      "title": "Riverside FC vs Northgate United", "short": "RIV vs NGU", "home": "Riverside FC", "away": "Northgate United",
+      "date": "2026-12-26T17:00:00+05:00", "stadiumId": "riverside-park", "sold": 0.72,
+      "prices": {
+        "default": 1500,
+        "stands": { "east-stand": 2000, "north-end": 1100, "south-end": 1100 },
+        "tiers": { "main-stand.vvip": 12000, "main-stand.boxes": 30000 }
+      }
+    },
+    {
+      "id": "f03", "sport": "football", "competition": "Sample Cup", "stage": "Quarter-final",
+      "title": "Riverside FC vs Eastbank Rovers", "short": "RIV vs EBR", "home": "Riverside FC", "away": "Eastbank Rovers",
+      "date": "2027-01-16T20:00:00+05:00", "stadiumId": "riverside-park", "sold": 0.35,
+      "prices": {
+        "default": 1000,
+        "stands": { "east-stand": 1400 },
+        "tiers": { "main-stand.vvip": 8000, "main-stand.boxes": 22000 }
+      }
+    },
+
+    {
+      "id": "b01", "sport": "basketball", "competition": "Sample Basketball League", "stage": "Regular season",
+      "title": "Halden Ravens vs Atlas", "short": "RAVENS vs ATLAS", "home": "Halden Ravens", "away": "Atlas",
+      "date": "2026-12-05T19:30:00+05:00", "stadiumId": "halden-arena", "sold": 0.45,
+      "prices": {
+        "default": 1800,
+        "stands": { "courtside-east": 15000, "courtside-west": 15000 },
+        "tiers": { "east-side.lower": 4500, "west-side.lower": 4500, "north-end.lower": 3000, "south-end.lower": 3000 }
+      }
+    },
+    {
+      "id": "b02", "sport": "basketball", "competition": "Sample Basketball League", "stage": "Regular season",
+      "title": "Halden Ravens vs Coastal Kings", "short": "RAVENS vs KINGS", "home": "Halden Ravens", "away": "Coastal Kings",
+      "date": "2026-12-19T19:30:00+05:00", "stadiumId": "halden-arena", "sold": 0.62,
+      "prices": {
+        "default": 2000,
+        "stands": { "courtside-east": 18000, "courtside-west": 18000 },
+        "tiers": { "east-side.lower": 5000, "west-side.lower": 5000, "north-end.lower": 3500, "south-end.lower": 3500 }
+      }
+    }
+  ]
+}

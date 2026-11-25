@@ -1,0 +1,56 @@
+{
+  "id": "harbour-oval",
+  "name": "Harbour Oval",
+  "sample": true,
+  "_note": "Fictional sample venue, made up to show a second, different layout: squarer field, two-tier stands, roofs, 4 floodlight towers.",
+  "city": "Sample City",
+  "country": "Sample",
+  "capacity": { "total": 42600 },
+
+  "field": { "shape": "superellipse", "superellipse": 2.6, "length": 150, "width": 140, "pitchAngle": 0 },
+
+  "ends": [
+    { "name": "Harbour End", "angle": 0 },
+    { "name": "City End", "angle": 180 }
+  ],
+
+  "stands": [
+    {
+      "id": "members-pavilion", "name": "Members' Pavilion", "type": "pavilion", "floors": 4,
+      "from": 332, "to": 28,
+      "tiers": [
+        { "key": "vvip", "name": "Members' Seats", "capacity": 2200 },
+        { "key": "boxes", "name": "Corporate Boxes", "capacity": 900, "boxes": 18 }
+      ]
+    },
+    {
+      "id": "north-stand", "name": "North Stand", "from": 33, "to": 92, "roof": true,
+      "tiers": [
+        { "key": "lower", "name": "North Stand Lower", "capacity": 5200 },
+        { "key": "upper", "name": "North Stand Upper", "capacity": 5600, "rise": 0.55 }
+      ]
+    },
+    { "id": "north-east-terrace", "name": "North-East Terrace", "from": 97, "to": 131, "capacity": 3000 },
+    {
+      "id": "city-end-stand", "name": "City End Stand", "from": 136, "to": 224, "roof": true,
+      "tiers": [
+        { "key": "lower", "name": "City End Lower", "capacity": 6000 },
+        { "key": "upper", "name": "City End Upper", "capacity": 6500, "rise": 0.55 }
+      ]
+    },
+    { "id": "south-east-terrace", "name": "South-East Terrace", "from": 229, "to": 263, "capacity": 3000 },
+    {
+      "id": "south-stand", "name": "South Stand", "from": 268, "to": 327,
+      "tiers": [
+        { "key": "lower", "name": "South Stand Lower", "capacity": 5200 },
+        { "key": "upper", "name": "South Stand Upper", "capacity": 5000, "rise": 0.55 }
+      ]
+    }
+  ],
+
+  "extras": {
+    "floodlights": { "towers": 4 },
+    "sightScreens": true,
+    "screens": [{ "size": "60 x 24 ft", "inFrontOf": "north-east-terrace" }]
+  }
+}

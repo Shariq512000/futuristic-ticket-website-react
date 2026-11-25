@@ -1,0 +1,92 @@
+{
+  "id": "national-stadium-karachi",
+  "name": "National Stadium Karachi",
+  "aliases": ["National Bank Stadium", "National Bank Cricket Arena"],
+  "city": "Karachi",
+  "country": "Pakistan",
+  "owner": "Pakistan Cricket Board",
+  "opened": "1955-04",
+  "reopenedAfterRenovation": "2025-02-11",
+  "homeTeams": ["Pakistan", "Karachi Kings"],
+
+  "capacity": {
+    "total": 30000,
+    "note": "Wikipedia gives 30,000 after the 2024-25 renovation. Tribune (Jan 2025) reported 32,000 cut to 28,000 during works; a 2020 blog said 34,000.",
+    "verified": "partial"
+  },
+
+  "_layout_note": "Angles are degrees around the ground, clockwise seen from above, 0 = University Road End (new pavilion building), 180 = the opposite end. Enclosure NAMES are confirmed. Their POSITIONS, ARC SPANS and per-enclosure SEAT COUNTS are estimates (no public seat map found); replace them with the PCB seat plan when available. Seat counts are set so the total reaches about 30,000. The 3D engine builds as many rows as each stand needs to reach its capacity.",
+
+  "field": {
+    "shape": "oval",
+    "length": 140,
+    "width": 130,
+    "pitchAngle": 0,
+    "verified": false,
+    "note": "Boundary dimensions not found in sources; typical international size used."
+  },
+
+  "ends": [
+    { "name": "University Road End", "angle": 0, "verified": "partial", "note": "New pavilion building sits at this end (Geo/Dawn, Feb 2025)." },
+    { "name": "Pavilion End", "angle": 180, "verified": "partial", "note": "Name from a Wikipedia photo caption; which end it is relative to the new pavilion is unconfirmed." }
+  ],
+
+  "stands": [
+    {
+      "id": "pavilion",
+      "name": "Pavilion Building",
+      "type": "pavilion",
+      "from": 340, "to": 20,
+      "floors": 5,
+      "facilities": [
+        "Players' and match officials' dressing rooms",
+        "ICC anti-corruption and anti-doping rooms",
+        "24 hospitality boxes on floors 3-4 (about 1,000 spectators)",
+        "Chairman's Box",
+        "VVIP Zaheer Abbas Enclosure",
+        "VVIP Majid Khan Enclosure"
+      ],
+      "tiers": [
+        { "key": "vvip", "name": "VVIP Patron Enclosures", "capacity": 1050, "sections": 2, "sectionNames": ["Zaheer Abbas Enclosure", "Majid Khan Enclosure"] },
+        { "key": "boxes", "name": "Hospitality Boxes · Floor 3", "capacity": 500, "boxes": 12, "firstBox": 1 },
+        { "key": "boxes", "name": "Hospitality Boxes · Floor 4", "capacity": 500, "boxes": 12, "firstBox": 13 }
+      ],
+      "verified": "partial"
+    },
+
+    { "id": "hanif-mohammad",   "name": "Hanif Mohammad Enclosure",   "from": 22,  "to": 44,  "capacity": 2480, "tiers": [{ "key": "lower" }], "verified": "name-only" },
+    { "id": "fazal-mahmood",    "name": "Fazal Mahmood Enclosure",    "from": 46,  "to": 68,  "capacity": 2480, "tiers": [{ "key": "lower" }], "verified": "name-only" },
+    { "id": "imran-khan",       "name": "Imran Khan Enclosure",       "from": 70,  "to": 92,  "capacity": 2480, "tiers": [{ "key": "lower" }], "verified": "name-only" },
+    { "id": "waqar-hasan",      "name": "Waqar Hasan Enclosure",      "from": 94,  "to": 116, "capacity": 2480, "tiers": [{ "key": "lower" }], "verified": "name-only" },
+    { "id": "younis-khan",      "name": "Younis Khan Enclosure",      "formerName": "Majid Khan Enclosure",    "from": 118, "to": 136, "capacity": 1050, "tiers": [{ "key": "lower" }], "verified": "name-and-capacity" },
+    { "id": "wasim-akram",      "name": "Wasim Akram Enclosure",      "from": 138, "to": 162, "capacity": 2480, "tiers": [{ "key": "lower" }], "screenInFront": "large", "verified": "name-only" },
+    { "id": "intikhab-alam",    "name": "Intikhab Alam Enclosure",    "from": 164, "to": 186, "capacity": 2480, "tiers": [{ "key": "lower" }], "screenInFront": "small", "verified": "name-only" },
+    { "id": "iqbal-qasim",      "name": "Iqbal Qasim Enclosure",      "from": 188, "to": 210, "capacity": 2480, "tiers": [{ "key": "lower" }], "verified": "name-only" },
+    { "id": "shahid-afridi",    "name": "Shahid Afridi Enclosure",    "formerName": "Quaid Enclosure",          "from": 212, "to": 230, "capacity": 1050, "tiers": [{ "key": "lower" }], "verified": "name-and-capacity" },
+    { "id": "mohammad-brothers","name": "Mohammad Brothers Enclosure","from": 232, "to": 254, "capacity": 2480, "tiers": [{ "key": "lower" }], "verified": "name-only" },
+    { "id": "nasimul-ghani",    "name": "Nasimul Ghani Enclosure",    "from": 256, "to": 278, "capacity": 2480, "tiers": [{ "key": "lower" }], "verified": "name-only" },
+    { "id": "nazar-mohammad",   "name": "Nazar Mohammad Enclosure",   "formerName": "Zaheer Abbas Enclosure",   "from": 280, "to": 298, "capacity": 1050, "tiers": [{ "key": "lower" }], "verified": "name-and-capacity", "note": "One report says this rename is for 'Karachi Stadium'; confirm it applies here." },
+    { "id": "wasim-bari",       "name": "Wasim Bari Enclosure",       "from": 300, "to": 338, "capacity": 2480, "tiers": [{ "key": "lower" }], "verified": "name-only" }
+  ],
+
+  "extras": {
+    "screens": [
+      { "size": "80 x 30 ft", "inFrontOf": "wasim-akram", "verified": true },
+      { "size": "20 x 30 ft", "inFrontOf": "intikhab-alam", "verified": true }
+    ],
+    "floodlights": { "type": "LED", "towers": 6, "verified": "partial", "note": "Tribune mentions six LED lights; tower count not explicitly confirmed." },
+    "roof": { "stands": [], "verified": "partial", "note": "Wikipedia caption mentions roof removal; no stand roofs modelled." },
+    "seating": "Foldable chairs on some stands; new guardrails (2025)",
+    "parking": 2700
+  },
+
+  "sources": [
+    "https://en.wikipedia.org/wiki/National_Stadium,_Karachi",
+    "https://www.zameen.com/blog/national-stadium-karachi.html",
+    "https://propakistani.pk/2025/01/23/national-stadium-karachi-renames-enclosures-to-honour-legends/",
+    "https://tribune.com.pk/story/2523988/national-stadium-enclosures-to-be-named-after-shahid-afridi-younis-khan",
+    "https://tribune.com.pk/story/2525044/c",
+    "https://www.geo.tv/latest/590131-newly-renovated-karachi-cricket-stadium-inaugurated-in-glittery-ceremony",
+    "https://www.dawn.com/news/1890286"
+  ]
+}
