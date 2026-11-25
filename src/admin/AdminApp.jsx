@@ -13,7 +13,7 @@ import MatchForm from './MatchForm.jsx';
 import Orders from './Orders.jsx';
 import OrderDetail from './OrderDetail.jsx';
 import Stadiums from './Stadiums.jsx';
-import StadiumEditor from './StadiumEditor.jsx';
+import StadiumBuilder from './stadium-builder/StadiumBuilder.jsx';
 import Sports from './Sports.jsx';
 
 const NAV = [['/admin', 'Dashboard', true], ['/admin/matches', 'Matches'], ['/admin/orders', 'Orders'], ['/admin/stadiums', 'Stadiums'], ['/admin/sports', 'Sports']];
@@ -47,8 +47,8 @@ export default function AdminApp() {
             <Route path="orders" element={<Orders />} />
             <Route path="orders/:id" element={<OrderDetail />} />
             <Route path="stadiums" element={<Stadiums />} />
-            <Route path="stadiums/new" element={<StadiumEditor key="new" />} />
-            <Route path="stadiums/:id" element={<StadiumEditor />} />
+            <Route path="stadiums/new" element={<StadiumBuilder key="new" />} />
+            <Route path="stadiums/:id" element={<StadiumBuilder />} />
             <Route path="sports" element={<Sports />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Route>

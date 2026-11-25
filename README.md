@@ -13,7 +13,9 @@ Admin panel at `/admin`.
 2. Copy `.env.example` to `.env` and set `MONGODB_URI` (Atlas or local) and `SESSION_SECRET`.
 3. Load data (first time only): `npm run seed -- --demo-sales`
 4. Create your admin: `npm run create-admin -- --email you@example.com --name "Your Name"`
-5. Terminal 1: `npm run server` (API on http://localhost:4000/api)
+5. Terminal 1: `npm run server` (API on http://localhost:4000/api). Use `npm run server:watch` to
+   auto-restart on server code changes; on Windows it can also restart on unrelated file changes,
+   which signs admins out unless `SESSION_SECRET` is set.
 6. Terminal 2: `npm run dev` and open the address Vite prints (http://localhost:5173 by default)
 
 Production: `npm run build`, then `npm start` serves the site, admin and API together on port 4000.
